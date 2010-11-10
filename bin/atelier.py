@@ -3,15 +3,22 @@ from __future__ import division
 import sys
 import xmlrpclib
 import re
+from datetime import datetime
 
 class FileCreator(object):
-  def convert(self, value, is_int):
-    if value is None or value is '':
-      if is_int:
-        return 0
-      else:
-        return ''
-    return int(float(value)) if is_int else value
+  def create_batch_file_output(self, record):
+    fmt = (
+        '{batch_number}',
+        ', ',
+        '{date}',
+        ', ',
+        '{time}',
+        ', ',
+        '{header_count}',
+        ', ',
+        '{detail_count}'
+    )
+    return self.get_formatted_output((record, ), ''.join(fmt))
 
   def create_detail_file_output(self, records):
     fmt = (
@@ -24,21 +31,21 @@ class FileCreator(object):
       '{unit_price!s:0>9.9s}', #ie 12 = 000012000
       '{unit_of_measure!s: <3.3s}',
       '{extended_price!s:0>9.9s}',
-      '{discount_percent!s:0>2.2s}', #required
+      '{discount_percent_short!s:0>2.2s}',
       '{discount_amount!s:0>7.7s}', #required
       '{client_line_id!s: >5.5s}',
-      '{edi_item_qualifier!s: >2.2s}',
-      '{edi_item_number!s: >15.15s}',
-      '{customer_part_number!s: >15.15s}',
+      '{edi_item_qualifier!s: <2.2s}',
+      '{edi_item_number!s: <15.15s}',
+      '{customer_part_number!s: <15.15s}',
       '{line_item_taxable!s: >1.1s}', #required
       '{discount_percent!s:0>4.4s}',
-      '{gift_from!s: >30.30s}',
-      '{gift_to!s: >30.30s}',
-      '{gift_txt1!s: >50.50s}',
-      '{gift_txt2!s: >50.50s}',
-      '{gift_txt3!s: >50.50s}',
-      '{gift_txt4!s: >50.50s}',
-      '{serial_number!s: >9.9s}'
+      '{gift_from!s: <30.30s}',
+      '{gift_to!s: <30.30s}',
+      '{gift_txt1!s: <50.50s}',
+      '{gift_txt2!s: <50.50s}',
+      '{gift_txt3!s: <50.50s}',
+      '{gift_txt4!s: <50.50s}',
+      '{serial_number!s: <9.9s}'
     )
     return self.get_formatted_output(records, ''.join(fmt))
 
@@ -49,63 +56,63 @@ class FileCreator(object):
     """
     fmt = (
       '{order_number!s:0>6.6s}',
-      '{location_number!s: >3.3s}',
+      '{location_number!s: <3.3s}',
       '{order_date!s: >8.8s}', #required
       '{shipping_date!s: >8.8s}', #required
-      '{customer_number!s: >6.6s}', #required
-      '{po_number!s: >15.15s}',
-      '{salesperson_number!s: >3.3s}',
-      '{ship_via_code!s: >3.3s}', #required
-      '{terms_code!s: >3.3s}', #required
-      '{comment!s: >30.30s}', #required
-      '{invoice_number!s: >6.6s}', #required
-      '{invoice_date!s: >8.8s}', #required
-      '{total_price!s: >9.9s}', #required
-      '{total_discount!s: >7.7s}', #required
-      '{bill_to_number!s: >6.6s}',
-      '{bill_to_name!s: >30.30s}', #required
-      '{bill_to_address_1!s: >30.30s}', #required
-      '{bill_to_address_2!s: >30.30s}', #required
-      '{bill_to_address_3!s: >30.30s}', #required
-      '{bill_to_city!s: >15.15s}', #required
-      '{bill_to_state!s: >10.10s}', #required
-      '{bill_to_zip!s: >10.10s}', #required
-      '{ship_to_number!s: >6.6s}', #required
-      '{ship_to_name!s: >30.30s}', #required
-      '{ship_to_address_1!s: >30.30s}', #required
-      '{ship_to_address_2!s: >30.30s}', #required
+      '{customer_number!s: <6.6s}', #required
+      '{po_number!s: <15.15s}',
+      '{salesperson_number!s: <3.3s}',
+      '{ship_via_code!s: <3.3s}', #required
+      '{terms_code!s: <3.3s}', #required
+      '{comment!s: <30.30s}', #required
+      '{invoice_number!s: <6.6s}', #required
+      '{invoice_date!s: <8.8s}', #required
+      '{total_price!s:0>9.9s}', #required
+      '{total_discount!s:0>7.7s}', #required
+      '{bill_to_number!s: <6.6s}',
+      '{bill_to_name!s: <30.30s}', #required
+      '{bill_to_address_1!s: <30.30s}', #required
+      '{bill_to_address_2!s: <30.30s}', #required
+      '{bill_to_address_3!s: <30.30s}', #required
+      '{bill_to_city!s: <15.15s}', #required
+      '{bill_to_state!s: <2.2}', #required
+      '{bill_to_zip!s: <10.10s}', #required
+      '{ship_to_number!s: <6.6s}', #required
+      '{ship_to_name!s: <30.30s}', #required
+      '{ship_to_address_1!s: <30.30s}', #required
+      '{ship_to_address_2!s: <30.30s}', #required
       '{store_number!s: >30.30s}',
-      '{ship_to_city!s: >15.15s}', #required
-      '{ship_to_state!s: >10.10s}', #required
-      '{ship_to_zip!s: >10.10s}', #required
-      '{ship_via_text!s: >15.15s}', #required
-      '{terms_text!s: >15.15s}',
-      '{client_customer_number!s: >10.10s}',
-      '{department_number!s: >10.10s}',
-      '{dist_center_number!s: >5.5s}',
-      '{trading_partner_id!s: >5.5s}',
-      '{batch_number!s: >6.6s}',
-      '{vendor_code!s: >7.7s}',
-      '{brand_code!s: >3.3s}',
-      '{co_code!s: >2.2s}',
-      '{carrier_code!s: >4.4s}', #required
-      '{shipper_name!s: >25.25s}', #required
+      '{ship_to_city!s: <15.15s}', #required
+      '{ship_to_state!s: <2.2}', #required
+      '{ship_to_zip!s: <10.10s}', #required
+      '{ship_via_text!s: <15.15s}', #required
+      '{terms_text!s: <15.15s}',
+      '{client_customer_number!s: <10.10s}',
+      '{department_number!s: <10.10s}',
+      '{dist_center_number!s: <5.5s}',
+      '{trading_partner_id!s: <5.5s}',
+      '{batch_number!s: <6.6s}',
+      '{vendor_code!s: <7.7s}',
+      '{brand_code!s: <3.3s}',
+      '{co_code!s: <2.2s}',
+      '{carrier_code!s: <4.4s}', #required
+      '{shipper_name!s: <25.25s}', #required
       '{cancel_date!s: >8.8s}',
       '{edi!s: >1.1s}',
-      '{ship_pay!s: >2.2s}',
-      '{long_customer_number!s: >15.15s}',
-      '{order_flag!s: >1.1s}',
-      '{misc_chg_2!s: >3.3s}',
-      '{misc_chg_3!s: >3.3s}',
-      '{misc_chg_4!s: >3.3s}',
-      '{sales_tax_code!s: >3.3s}', #required
-      '{freight_amount!s: >7.7s}', #required
-      '{misc_chg_2_amount!s: >7.7s}',
-      '{misc_chg_3_amount!s: >7.7s}',
-      '{misc_chg_4_amount!s: >7.7s}',
-      '{long_order_number!s: >10.10s}',
+      '{ship_pay!s: <2.2s}',
+      '{long_customer_number!s: <15.15s}',
+      '{order_flag!s: <1.1s}',
+      '{misc_chg_2!s: <3.3s}',
+      '{misc_chg_3!s: <3.3s}',
+      '{misc_chg_4!s: <3.3s}',
+      '{sales_tax_code!s: <3.3s}', #required
+      '{freight_amount!s:0>7.7s}', #required
+      '{misc_chg_2_amount!s:0>7.7s}',
+      '{misc_chg_3_amount!s:0>7.7s}',
+      '{misc_chg_4_amount!s:0>7.7s}',
+      '{long_order_number!s:0>10.10s}',
       '{send_email_flag!s: >1.1s}',
-      '{email_address!s: >100.100s}'
+      '{email_address!s: <100.100s}'
     )
     return self.get_formatted_output(records, ''.join(fmt))
 
@@ -199,20 +206,6 @@ class FileCreator(object):
       }
     ]
 
-  def trunc(self, value, fmt):
-    if value is None:
-      return None
-    d = re.compile('%(\d+)')
-    m = d.match(fmt)
-    maxlength = m.group(1)
-    try:
-      if len(value) > maxlength:
-        return value[0:maxlength]
-      else:
-        return value
-    except TypeError:
-      return value
-
   def get_credentials(self):
     return dict(
         url = 'https://secure.ateliercologne.com/store/api/xmlrpc',
@@ -265,13 +258,14 @@ class AtelierSvc(object):
 
 class AtelierInvoiceDao(object):
   @staticmethod
-  def map(svc_record):
-    return tuple([
-      dict(
-        batch_number           = '',
-        bill_to_address_1      = svc_record['billing_address']['street'], #required
-        bill_to_address_2      = '', #required
-        bill_to_address_3      = '', #required
+  def map(svc_record, InvoiceOnly=False, BatchNumber=''):
+    mapped = []
+    for item_number, item in enumerate(svc_record['items']):
+      mapped.append(dict(
+        batch_number           = BatchNumber,
+        bill_to_address_1      = '', #required (set below)
+        bill_to_address_2      = '', #required (set below)
+        bill_to_address_3      = '', #required (set below)
         bill_to_city           = svc_record['billing_address']['city'], #required
         bill_to_name           = AtelierInvoiceDao.get_name(svc_record['billing_address']), #required
         bill_to_number         = '',
@@ -283,20 +277,21 @@ class AtelierInvoiceDao(object):
         client_customer_number = svc_record['customer_id'],
         client_line_id         = '', ##???? ##What is this?  Don't think we have it
         co_code                = '', ##???? ##What is this?  Don't think we have it
-        comment                = '', ##???? #required ##What is this?  Don't think we have it
+        comment                = '*', ##???? #required ##What is this?  Don't think we have it
         customer_number        = '', #required ##???? ##What is this?  Don't think we have it
         customer_part_number   = '', ##????
         department_number      = '', ##????
-        description_1          = item.get('description', ''), #required
+        description_1          = item.get('description', '') or '', #required
         description_2          = '', #required
         discount_amount        = int(float(item['base_discount_invoiced'])) * 100, #required
-        discount_percent       = int(round(float(item['discount_percent']), 2)), #required
+        discount_percent       = int(round(float(item['discount_percent']), 2)) * 100, #required
+        discount_percent_short = int(round(float(item['discount_percent']), 2)), #required
         dist_center_number     = '', ##????
         edi                    = '', ##????
         edi_item_number        = '', ##????
-        edi_item_qualifier     = 'UP', ##????
+        edi_item_qualifier     = '', ##????
         email_address          = svc_record['customer_email'],
-        extended_price         = '', ##???? Don't think this is available
+        extended_price         = 0, ##???? Don't think this is available
         freight_amount         = '', ##???? #required ## What is this?
         gift_from              = '', ##???? Don't think this is available
         gift_to                = '', ##???? Don't think this is available
@@ -305,9 +300,9 @@ class AtelierInvoiceDao(object):
         gift_txt3              = '', ##???? Don't think this is available
         gift_txt4              = '', ##???? Don't think this is available
         invoice_date           = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
-        invoice_number         = svc_record['increment_id'], #required
-        line_item_taxable      = 1 if int(float(svc_record['tax_amount'])) == 0 else 0, #required
-        line_number            = '', ##????
+        invoice_number         = '',
+        line_item_taxable      = 'Y' if int(float(svc_record['tax_amount'])) == 0 else 'N', #required
+        line_number            = (item_number + 1) * 10, ##As per request
         location_number        = '', ##????
         long_customer_number   = '', ##????
         long_order_number      = '', ##????
@@ -319,16 +314,16 @@ class AtelierInvoiceDao(object):
         misc_chg_4_amount      = '', ##????
         order_date             = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
         order_flag             = '', ##????
-        order_number           = svc_record['order_id'], #required
-        po_number              = svc_record['payment']['po_number'],
+        order_number           = int(svc_record['order_id']) + 500000, #required
+        po_number              = 'WEB: %s' % (svc_record['payment']['po_number'], ), ## WEB+PONUM
         quantity_ordered       = int(float(svc_record['total_qty_ordered'])) * 1000, #ie 12=000012000
-        salesperson_number     = '', ##????
+        salesperson_number     = 'WEB', ##WEB
         sales_tax_code         = '', #required ##???? ##We don't appear to have tax codes
         send_email_flag        = '', ##????
-        serial_number          = '',##????
+        serial_number          = '', ##????
         ship_pay               = '', ##????
-        ship_to_address_1      = svc_record['shipping_address']['street'], #required
-        ship_to_address_2      = '', #required
+        ship_to_address_1      = '', #required (set below)
+        ship_to_address_2      = '', #required (set below)
         ship_to_city           = svc_record['shipping_address']['city'], #required
         ship_to_name           = AtelierInvoiceDao.get_name(svc_record['shipping_address']), #required
         ship_to_number         = '', #required
@@ -338,17 +333,27 @@ class AtelierInvoiceDao(object):
         ship_via_text          = svc_record['shipping_description'], #required
         shipper_name           = svc_record['shipping_method'], #required
         shipping_date          = '', #required ##Don't think this is provided
-        stock_number           = item['sku'], #required ##????
+        stock_number           = item.get('sku', '') or '', #required ##????
         store_number           = item['store_id'],
-        terms_code             = '', #required ##????
+        terms_code             = 'CC', ##CC
         terms_text             = '', ##????
-        total_discount         = int(round(float(svc_record['discount_amount']), 3)) * -1000, #required
-        total_price            = int(round(float(svc_record['total_paid']), 3)) * 100, #required
+        total_discount         = 0, ## As per request
+        total_price            = 0, ## As per request
         trading_partner_id     = '', ##????
-        unit_of_measure        = 'EA', ##????
+        unit_of_measure        = 'EA',
         unit_price             = int(round(float(item['price']), 3)) * 1000, #ie 12=000012000
         vendor_code            = '' ##????
-        ) for item in svc_record['items'] ])
+        )
+      )
+      mapped[-1]['bill_to_address_1'], mapped[-1]['bill_to_address_2'], mapped[-1]['bill_to_address_3'] = \
+        AtelierInvoiceDao.get_address(svc_record['billing_address']['street'])
+      mapped[-1]['ship_to_address_1'], mapped[-1]['ship_to_address_2'], mapped[-1]['ship_to_address_3'] = \
+        AtelierInvoiceDao.get_address(svc_record['shipping_address']['street'])
+
+      if InvoiceOnly:
+        ## If invoiceonly is set, only run through once (not for all line items)
+        break
+    return tuple(mapped)
 
   @staticmethod
   def map_state(name):
@@ -425,6 +430,13 @@ class AtelierInvoiceDao(object):
       return "%s %s" % (first_name, last_name)
 
   @staticmethod
+  def get_address(value):
+    addr = re.split("[\r\n]+", value, maxsplit=3)
+    while len(addr) < 3:
+      addr.append('')
+    return tuple(addr)
+
+  @staticmethod
   def format_date(date):
     d = re.compile('(\d+)-(\d+)-(\d+)')
     m = d.match(date)
@@ -432,16 +444,52 @@ class AtelierInvoiceDao(object):
 
 
 def main():
+  now = datetime.now()
+  batch_number = now.strftime('%y%m%d')
   creator = FileCreator()
+
+  sys.stderr.write("Getting credentials\n")
+
   a = AtelierSvc(**creator.get_credentials())
+  # Need to pull only invoices since last pull
+  sys.stderr.write("Getting invoices\n")
   invoices = a.get_invoices('2010-01-01', '2010-12-01')
-  for item in invoices:
-    for output in creator.create_header_file_output(AtelierInvoiceDao.map(item)):
-      print output
-  print "\n========= Starting Detail =========="
-  for item in invoices:
-    for output in creator.create_detail_file_output(AtelierInvoiceDao.map(item)):
-      print output
+
+  record_counts = dict(
+      header = 0,
+      detail = 0
+  )
+
+  sys.stderr.write("Creating header file\n")
+  with open('H%s' % (batch_number, ), 'w') as file:
+    for item in invoices:
+      for output in creator.create_header_file_output(AtelierInvoiceDao.map(item, InvoiceOnly=True, BatchNumber=batch_number)):
+        record_counts['header'] += 1
+        file.write(output)
+        file.write("\n")
+
+  sys.stderr.write("Creating detail file\n")
+  with open('D%s' % (batch_number, ), 'w') as file:
+    for item in invoices:
+      for output in creator.create_detail_file_output(AtelierInvoiceDao.map(item, BatchNumber=batch_number)):
+        record_counts['detail'] += 1
+        file.write(output)
+        file.write("\n")
+
+  sys.stderr.write("Creating batch file\n")
+  with open("B%s" % (batch_number, ), 'w') as file:
+    record = {
+        'batch_number': batch_number,
+        'date': now.strftime('%Y%m%d'),
+        'time': now.strftime('%I:%M:%S%p'),
+        'header_count': record_counts['header'],
+        'detail_count': record_counts['detail']
+        }
+    for output in creator.create_batch_file_output(record):
+      file.write(output)
+      file.write("\n")
+
+  sys.stderr.write("Done")
 
 if __name__ == '__main__':
   main()
