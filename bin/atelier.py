@@ -142,7 +142,7 @@ class FileCreator(object):
         'shipping_date': 20100825,
         'customer_number': 123456,
         'ship_via_code': 10,
-        'terms_code': 'cc',
+        'terms_code': 'Cc',
         'comment': 'Send quickly please',
         'invoice_number': 543345,
         'invoice_date': 20100824,
@@ -273,7 +273,7 @@ class AtelierInvoiceDao(object):
     mapped = []
     for item_number, item in enumerate(svc_record['items']):
       mapped.append(dict(
-        batch_number           = BatchNumber,
+        batch_number           = '',
         bill_to_address_1      = '', #required (set below)
         bill_to_address_2      = '', #required (set below)
         bill_to_address_3      = '', #required (set below)
@@ -286,17 +286,17 @@ class AtelierInvoiceDao(object):
         brand_code             = '',
         cancel_date            = '',
         carrier_code           = svc_record['shipping_method'], #required
-        client_customer_number = svc_record['customer_id'],
-        client_line_id         = '', ##???? ##What is this?  Don't think we have it
-        co_code                = '', ##???? ##What is this?  Don't think we have it
-        comment                = '*', ##???? #required ##What is this?  Don't think we have it
-        customer_number        = '', #required ##???? ##What is this?  Don't think we have it
-        customer_part_number   = '', ##????
+        client_customer_number = '',
+        client_line_id         = '',
+        co_code                = '',
+        comment                = '', #required
+        customer_number        = '', #required
+        customer_part_number   = '',
         currency               = svc_record.get('order_currency_code'),
         department_number      = '', ##????
         description_1          = item.get('description', '') or '', #required
         description_2          = '', #required
-        discount_amount        = int(float(item['base_discount_invoiced'])) * 100, #required
+        discount_amount        = 0,
         discount_percent       = int(round(float(item['discount_percent']), 2)) * 100, #required
         discount_percent_short = int(round(float(item['discount_percent']), 2)), #required
         dist_center_number     = '', ##????
@@ -315,9 +315,9 @@ class AtelierInvoiceDao(object):
         gift_txt2              = '', ##???? Don't think this is available
         gift_txt3              = '', ##???? Don't think this is available
         gift_txt4              = '', ##???? Don't think this is available
-        invoice_date           = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
+        invoice_date           = '',
         invoice_number         = '',
-        line_item_taxable      = 'Y' if int(float(svc_record['tax_amount'])) == 0 else 'N', #required
+        line_item_taxable      = 'Y' if AtelierInvoiceDao.map_state(svc_record['billing_address']['region']) else 'N',
         line_number            = (item_number + 1) * 10, ##As per request
         location_number        = '', ##????
         long_customer_number   = '', ##????
@@ -331,15 +331,15 @@ class AtelierInvoiceDao(object):
         order_date             = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
         order_flag             = '', ##????
         order_number           = int(svc_record['order_id']) + 500000, #required
-        paper_invoice_flag     = '',
-        po_number              = 'WEB: %s' % (svc_record['payment']['po_number'], ), ## WEB+PONUM
+        paper_invoice_flag     = '*',
+        po_number              = 'WEB%s' % (svc_record['payment']['po_number'], ), ## WEB+PONUM
         phone_number           = '',
         quantity_ordered       = int(float(svc_record['total_qty_ordered'])) * 1000, #ie 12=000012000
         salesperson_number     = 'WEB', ##WEB
         sales_tax_code         = '', #required ##???? ##We don't appear to have tax codes
         send_email_flag        = 'N', ##????
         serial_number          = '', ##????
-        ship_pay               = '', ##????
+        ship_pay               = 'PP', ##????
         ship_to_address_1      = '', #required (set below)
         ship_to_address_2      = '', #required (set below)
         ship_to_address_3      = '', #required (set below)
@@ -351,12 +351,12 @@ class AtelierInvoiceDao(object):
         ship_to_country        = svc_record['shipping_address']['country_id'], #required
         ship_via_code          = svc_record['shipping_method'], #required
         ship_via_text          = svc_record['shipping_description'], #required
-        shipper_name           = svc_record['shipping_method'], #required
+        shipper_name           = svc_record['shipping_method'].upper(), #required
         shipping_date          = '', #required ##Don't think this is provided
         stock_number           = item.get('sku', '') or '', #required ##????
         store_number           = item['store_id'],
         terms_code             = 'CC', ##CC
-        terms_text             = '', ##????
+        terms_text             = 'CREDIT CARD', ##????
         total_discount         = 0, ## As per request
         total_price            = 0, ## As per request
         trading_partner_id     = '', ##????
@@ -438,7 +438,11 @@ class AtelierInvoiceDao(object):
         'Wisconsin'         : 'WI',
         'Wyoming'           : 'WY'
         })
-    return states[name]
+    try:
+      return states[name]
+    except KeyError:
+      ## If state is unknown
+      return 'NA'
 
   @staticmethod
   def get_name(record):
