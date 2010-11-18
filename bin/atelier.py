@@ -1,7 +1,10 @@
 from __future__ import division
+from __future__ import with_statement
 
+import os
 import sys
 import xmlrpclib
+import pickle
 import re
 from datetime import datetime
 
@@ -22,7 +25,7 @@ class FileCreator(object):
 
   def create_detail_file_output(self, records):
     fmt = (
-      '{order_number!s:0>6.6s}', #required
+      '{order_number!s:0>10.10s}', #required
       '{line_number!s:0>4.4s}',
       '{stock_number!s: <15.15s}', #required
       '{description_1!s: <30.30s}', #required
@@ -31,16 +34,16 @@ class FileCreator(object):
       '{unit_price!s:0>9.9s}', #ie 12 = 000012000
       '{unit_of_measure!s: <3.3s}',
       '{extended_price!s:0>9.9s}',
-      '{discount_percent_short!s:0>2.2s}',
-      '{discount_amount!s:0>7.7s}', #required
+      '  ',
+      '{discount_amount!s:0>8.8s}', #required
       '{client_line_id!s: >5.5s}',
       '{edi_item_qualifier!s: <2.2s}',
       '{edi_item_number!s: <15.15s}',
       '{customer_part_number!s: <15.15s}',
       '{line_item_taxable!s: >1.1s}', #required
       '{discount_percent!s:0>4.4s}',
-      '{gift_from!s: <30.30s}',
       '{gift_to!s: <30.30s}',
+      '{gift_from!s: <30.30s}',
       '{gift_txt1!s: <50.50s}',
       '{gift_txt2!s: <50.50s}',
       '{gift_txt3!s: <50.50s}',
@@ -55,17 +58,18 @@ class FileCreator(object):
       :param records: Takes an iterable type of records
     """
     fmt = (
-      '{order_number!s:0>6.6s}',
+      '   ',
+      '{order_number!s:0>7.7s}',
       '{location_number!s: <3.3s}',
       '{order_date!s: >8.8s}', #required
       '{shipping_date!s: >8.8s}', #required
-      '{customer_number!s: <6.6s}', #required
+      '{customer_number!s: <10.10s}', #required
       '{po_number!s: <15.15s}',
       '{salesperson_number!s: <3.3s}',
       '{ship_via_code!s: <3.3s}', #required
       '{terms_code!s: <3.3s}', #required
-      '{comment!s: <30.30s}', #required
-      '{invoice_number!s: <6.6s}', #required
+      '{comment!s: <45.45}', #required
+      '{invoice_number!s: <10.10s}', #required
       '{invoice_date!s: <8.8s}', #required
       '{total_price!s:0>9.9s}', #required
       '{total_discount!s:0>7.7s}', #required
@@ -77,17 +81,19 @@ class FileCreator(object):
       '{bill_to_city!s: <15.15s}', #required
       '{bill_to_state!s: <2.2}', #required
       '{bill_to_zip!s: <10.10s}', #required
+      '{bill_to_country!s: <3.3}', #required
       '{ship_to_number!s: <6.6s}', #required
       '{ship_to_name!s: <30.30s}', #required
       '{ship_to_address_1!s: <30.30s}', #required
       '{ship_to_address_2!s: <30.30s}', #required
-      '{store_number!s: >30.30s}',
+      '{ship_to_address_3!s: <30.30s}', #required
       '{ship_to_city!s: <15.15s}', #required
       '{ship_to_state!s: <2.2}', #required
       '{ship_to_zip!s: <10.10s}', #required
+      '{ship_to_country!s: <3.3}', #required
       '{ship_via_text!s: <15.15s}', #required
       '{terms_text!s: <15.15s}',
-      '{client_customer_number!s: <10.10s}',
+      '{client_customer_number!s: <15.15s}',
       '{department_number!s: <10.10s}',
       '{dist_center_number!s: <5.5s}',
       '{trading_partner_id!s: <5.5s}',
@@ -99,20 +105,25 @@ class FileCreator(object):
       '{shipper_name!s: <25.25s}', #required
       '{cancel_date!s: >8.8s}',
       '{edi!s: >1.1s}',
+      '{edi2!s: >1.1s}',
       '{ship_pay!s: <2.2s}',
-      '{long_customer_number!s: <15.15s}',
       '{order_flag!s: <1.1s}',
       '{misc_chg_2!s: <3.3s}',
       '{misc_chg_3!s: <3.3s}',
       '{misc_chg_4!s: <3.3s}',
       '{sales_tax_code!s: <3.3s}', #required
-      '{freight_amount!s:0>7.7s}', #required
-      '{misc_chg_2_amount!s:0>7.7s}',
-      '{misc_chg_3_amount!s:0>7.7s}',
-      '{misc_chg_4_amount!s:0>7.7s}',
+      '{freight_amount!s:0>8.8s}', #required
+      '{misc_chg_2_amount!s:0>8.8s}',
+      '{misc_chg_3_amount!s:0>8.8s}',
+      '{misc_chg_4_amount!s:0>8.8s}',
       '{long_order_number!s:0>10.10s}',
+      '{division_number!s: <20.20s}',
+      '{currency!s: <3.3s}',
+      '{paper_invoice_flag!s: <1.1s}',
       '{send_email_flag!s: >1.1s}',
-      '{email_address!s: <100.100s}'
+      '{email_address!s: <100.100s}',
+      '{phone_number!s: <20.20s}',
+      '{fax_number!s: <20.20s}'
     )
     return self.get_formatted_output(records, ''.join(fmt))
 
@@ -271,6 +282,7 @@ class AtelierInvoiceDao(object):
         bill_to_number         = '',
         bill_to_state          = AtelierInvoiceDao.map_state(svc_record['billing_address']['region']), #required
         bill_to_zip            = svc_record['billing_address']['postcode'], #required
+        bill_to_country        = svc_record['billing_address']['country_id'], #required
         brand_code             = '',
         cancel_date            = '',
         carrier_code           = svc_record['shipping_method'], #required
@@ -280,6 +292,7 @@ class AtelierInvoiceDao(object):
         comment                = '*', ##???? #required ##What is this?  Don't think we have it
         customer_number        = '', #required ##???? ##What is this?  Don't think we have it
         customer_part_number   = '', ##????
+        currency               = svc_record.get('order_currency_code'),
         department_number      = '', ##????
         description_1          = item.get('description', '') or '', #required
         description_2          = '', #required
@@ -287,11 +300,14 @@ class AtelierInvoiceDao(object):
         discount_percent       = int(round(float(item['discount_percent']), 2)) * 100, #required
         discount_percent_short = int(round(float(item['discount_percent']), 2)), #required
         dist_center_number     = '', ##????
-        edi                    = '', ##????
+        division_number        = '',
+        edi                    = 'N', ##????
+        edi2                   = 'N', ##????
         edi_item_number        = '', ##????
         edi_item_qualifier     = '', ##????
         email_address          = svc_record['customer_email'],
         extended_price         = 0, ##???? Don't think this is available
+        fax_number             = '',
         freight_amount         = '', ##???? #required ## What is this?
         gift_from              = '', ##???? Don't think this is available
         gift_to                = '', ##???? Don't think this is available
@@ -315,20 +331,24 @@ class AtelierInvoiceDao(object):
         order_date             = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
         order_flag             = '', ##????
         order_number           = int(svc_record['order_id']) + 500000, #required
+        paper_invoice_flag     = '',
         po_number              = 'WEB: %s' % (svc_record['payment']['po_number'], ), ## WEB+PONUM
+        phone_number           = '',
         quantity_ordered       = int(float(svc_record['total_qty_ordered'])) * 1000, #ie 12=000012000
         salesperson_number     = 'WEB', ##WEB
         sales_tax_code         = '', #required ##???? ##We don't appear to have tax codes
-        send_email_flag        = '', ##????
+        send_email_flag        = 'N', ##????
         serial_number          = '', ##????
         ship_pay               = '', ##????
         ship_to_address_1      = '', #required (set below)
         ship_to_address_2      = '', #required (set below)
+        ship_to_address_3      = '', #required (set below)
         ship_to_city           = svc_record['shipping_address']['city'], #required
         ship_to_name           = AtelierInvoiceDao.get_name(svc_record['shipping_address']), #required
         ship_to_number         = '', #required
         ship_to_state          = AtelierInvoiceDao.map_state(svc_record['shipping_address']['region']), #required
         ship_to_zip            = svc_record['shipping_address']['postcode'], #required
+        ship_to_country        = svc_record['shipping_address']['country_id'], #required
         ship_via_code          = svc_record['shipping_method'], #required
         ship_via_text          = svc_record['shipping_description'], #required
         shipper_name           = svc_record['shipping_method'], #required
@@ -491,5 +511,39 @@ def main():
 
   sys.stderr.write("Done")
 
+def histfile():
+  pass
+
+def get_lock():
+  if os.path.exists(pidfile()):
+    # Check to see if the process is still running
+    oldpid = open(pidfile()).read()
+    try:
+      os.getpgid(int(oldpid))
+    except OSError:
+      pass
+      # This means the pid is not running.  This is ok.
+    else:
+      sys.stderr.write("Existing process with pid %s.  Exiting.\n" % (oldpid,))
+      sys.exit(1)
+    os.unlink(pidfile())
+  try:
+    with open(pidfile(), 'w') as file:
+        file.write(str(os.getpid()))
+  except IOError:
+    sys.stderr.write("Pidfile Error: %s path does exist or is not writable.  Cannot continue\n" % (pidfile(), ))
+    sys.exit(1)
+
+def remove_lock():
+  os.unlink(pidfile())
+
+def pidfile():
+  return os.path.join(os.path.sep, 'var', 'run', 'atelier_invoices', 'running.pid')
+
+def program_name():
+  return os.path.basename(sys.argv[0])
+
 if __name__ == '__main__':
+  get_lock()
   main()
+  remove_lock()
