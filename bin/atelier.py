@@ -8,6 +8,8 @@ import pickle
 import re
 from datetime import datetime
 
+__PIDDIR__ = '/var/run/atelier_invoices'
+
 class FileCreator(object):
   def create_batch_file_output(self, record):
     fmt = (
@@ -308,7 +310,7 @@ class AtelierInvoiceDao(object):
         email_address          = svc_record['customer_email'],
         extended_price         = 0, ##???? Don't think this is available
         fax_number             = '',
-        freight_amount         = '', ##???? #required ## What is this?
+        freight_amount         = int(float(svc_record['payment']['shipping_amount']) * 1000),
         gift_from              = '', ##???? Don't think this is available
         gift_to                = '', ##???? Don't think this is available
         gift_txt1              = '', ##???? Don't think this is available
@@ -331,12 +333,12 @@ class AtelierInvoiceDao(object):
         order_date             = AtelierInvoiceDao.format_date(svc_record['created_at']), #required
         order_flag             = '', ##????
         order_number           = int(svc_record['order_id']) + 500000, #required
-        paper_invoice_flag     = '*',
+        paper_invoice_flag     = 'M',
         po_number              = 'WEB%s' % (svc_record['payment']['po_number'], ), ## WEB+PONUM
         phone_number           = '',
         quantity_ordered       = int(float(svc_record['total_qty_ordered'])) * 1000, #ie 12=000012000
         salesperson_number     = 'WEB', ##WEB
-        sales_tax_code         = '', #required ##???? ##We don't appear to have tax codes
+        sales_tax_code         = int(float(item['tax_percent']) * 100), #required ##???? ##We don't appear to have tax codes
         send_email_flag        = 'N', ##????
         serial_number          = '', ##????
         ship_pay               = 'PP', ##????
@@ -519,6 +521,10 @@ def histfile():
   pass
 
 def get_lock():
+  if not os.path.exists(piddir()):
+    sys.stderr.write("Piddir: %s does not exist.  Please create this directory and retry.\n" % piddir())
+    sys.exit(1)
+
   if os.path.exists(pidfile()):
     # Check to see if the process is still running
     oldpid = open(pidfile()).read()
@@ -541,8 +547,11 @@ def get_lock():
 def remove_lock():
   os.unlink(pidfile())
 
+def piddir():
+  return __PIDDIR__
+
 def pidfile():
-  return os.path.join(os.path.sep, 'var', 'run', 'atelier_invoices', 'running.pid')
+  return os.path.join(piddir(), 'running.pid')
 
 def program_name():
   return os.path.basename(sys.argv[0])
