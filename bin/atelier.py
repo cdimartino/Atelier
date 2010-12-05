@@ -65,7 +65,7 @@ class FileCreator(object):
       '{location_number!s: <3.3s}',
       '{order_date!s: >8.8s}', #required
       '{shipping_date!s: >8.8s}', #required
-      '{customer_number!s: <10.10s}', #required
+      '{customer_number!s: >10.10s}', #required
       '{po_number!s: <15.15s}',
       '{salesperson_number!s: <3.3s}',
       '{ship_via_code!s: <3.3s}', #required
@@ -287,12 +287,12 @@ class AtelierInvoiceDao(object):
         bill_to_country        = svc_record['billing_address']['country_id'], #required
         brand_code             = '',
         cancel_date            = '',
-        carrier_code           = svc_record['shipping_method'], #required
+        carrier_code           = '',
         client_customer_number = '',
         client_line_id         = '',
         co_code                = '',
         comment                = '', #required
-        customer_number        = '', #required
+        customer_number        = '999999', #required
         customer_part_number   = '',
         currency               = svc_record.get('order_currency_code'),
         department_number      = '', ##????
@@ -310,7 +310,7 @@ class AtelierInvoiceDao(object):
         email_address          = svc_record['customer_email'],
         extended_price         = 0, ##???? Don't think this is available
         fax_number             = '',
-        freight_amount         = int(float(svc_record['payment']['shipping_amount']) * 1000),
+        freight_amount         = int(float(svc_record['payment']['shipping_amount']) * 100),
         gift_from              = '', ##???? Don't think this is available
         gift_to                = '', ##???? Don't think this is available
         gift_txt1              = '', ##???? Don't think this is available
@@ -319,7 +319,7 @@ class AtelierInvoiceDao(object):
         gift_txt4              = '', ##???? Don't think this is available
         invoice_date           = '',
         invoice_number         = '',
-        line_item_taxable      = 'Y' if AtelierInvoiceDao.map_state(svc_record['billing_address']['region']) else 'N',
+        line_item_taxable      = 'N' if AtelierInvoiceDao.map_state(svc_record['billing_address']['region']) else 'Y',
         line_number            = (item_number + 1) * 10, ##As per request
         location_number        = '', ##????
         long_customer_number   = '', ##????
@@ -351,9 +351,9 @@ class AtelierInvoiceDao(object):
         ship_to_state          = AtelierInvoiceDao.map_state(svc_record['shipping_address']['region']), #required
         ship_to_zip            = svc_record['shipping_address']['postcode'], #required
         ship_to_country        = svc_record['shipping_address']['country_id'], #required
-        ship_via_code          = svc_record['shipping_method'], #required
+        ship_via_code          = svc_record['shipping_method'].upper(), #required
         ship_via_text          = svc_record['shipping_description'], #required
-        shipper_name           = svc_record['shipping_method'].upper(), #required
+        shipper_name           = '', #required
         shipping_date          = '', #required ##Don't think this is provided
         stock_number           = item.get('sku', '') or '', #required ##????
         store_number           = item['store_id'],
@@ -522,7 +522,7 @@ def histfile():
 
 def get_lock():
   if not os.path.exists(piddir()):
-    sys.stderr.write("Piddir: %s does not exist.  Please create this directory and retry.\n" % piddir())
+    sys.stderr.write("Piddir: %s does not exist.  Please create this directory and retry.\n" % (piddir(),) )
     sys.exit(1)
 
   if os.path.exists(pidfile()):
