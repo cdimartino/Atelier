@@ -4,11 +4,15 @@ from __future__ import with_statement
 import os
 import sys
 import xmlrpclib
-import pickle
+try:
+  import cPickle as pickle
+except:
+  import pickle
 import re
 from datetime import datetime
 
 __PIDDIR__ = '/var/run/atelier_invoices'
+__HISTDIR__ = '/var/cache/atelier_invoices'
 
 class FileCreator(object):
   def create_batch_file_output(self, record):
@@ -268,10 +272,13 @@ class AtelierSvc(object):
   def sales_order(self, id):
     return self.call('sales_order.info', [{'increment_id': id}])
 
+  def get_product_description(self, sku):
+    return self.call('product.info', [sku]).get('details')
+
 
 class AtelierInvoiceDao(object):
   @staticmethod
-  def map(svc_record, InvoiceOnly=False, BatchNumber=''):
+  def map(svc_record, InvoiceOnly=False, BatchNumber='', svc=None):
     mapped = []
     for item_number, item in enumerate(svc_record['items']):
       mapped.append(dict(
@@ -296,7 +303,7 @@ class AtelierInvoiceDao(object):
         customer_part_number   = '',
         currency               = svc_record.get('order_currency_code'),
         department_number      = '', ##????
-        description_1          = item.get('description', '') or '', #required
+        description_1          = svc.get_product_description(item.get('sku')), #required
         description_2          = '', #required
         discount_amount        = 0,
         discount_percent       = int(round(float(item['discount_percent']), 2)) * 100, #required
@@ -319,7 +326,7 @@ class AtelierInvoiceDao(object):
         gift_txt4              = '', ##???? Don't think this is available
         invoice_date           = '',
         invoice_number         = '',
-        line_item_taxable      = 'N' if AtelierInvoiceDao.map_state(svc_record['billing_address']['region']) else 'Y',
+        line_item_taxable      = 'Y' if AtelierInvoiceDao.taxable_state(AtelierInvoiceDao.map_state(svc_record['billing_address']['region'])) else 'N',
         line_number            = (item_number + 1) * 10, ##As per request
         location_number        = '', ##????
         long_customer_number   = '', ##????
@@ -351,7 +358,7 @@ class AtelierInvoiceDao(object):
         ship_to_state          = AtelierInvoiceDao.map_state(svc_record['shipping_address']['region']), #required
         ship_to_zip            = svc_record['shipping_address']['postcode'], #required
         ship_to_country        = svc_record['shipping_address']['country_id'], #required
-        ship_via_code          = svc_record['shipping_method'].upper(), #required
+        ship_via_code          = AtelierInvoiceDao.ship_via(svc_record['shipping_method'].upper(), svc_record['shipping_address']['country_id']), #required
         ship_via_text          = svc_record['shipping_description'], #required
         shipper_name           = '', #required
         shipping_date          = '', #required ##Don't think this is provided
@@ -447,6 +454,10 @@ class AtelierInvoiceDao(object):
       return 'NA'
 
   @staticmethod
+  def taxable_state(code):
+    return True if code in ('NY',) else False
+
+  @staticmethod
   def get_name(record):
     first_name = record.get('firstname', '')
     last_name = record.get('lastname', '')
@@ -468,42 +479,62 @@ class AtelierInvoiceDao(object):
     m = d.match(date)
     return "%04d%02d%02d" % ( int(m.group(1)), int(m.group(2)), int(m.group(3)) )
 
+  @staticmethod
+  def ship_via(code, country):
+    if country != 'US':
+      return 'UPI'
+    else:
+      if code == 'UPS_GND':
+        return '01'
+      elif code == 'UPS_EXP':
+        return '08'
+
 
 def main():
   now = datetime.now()
   batch_number = now.strftime('%y%m%d')
   creator = FileCreator()
 
+  __output_directory__ = sys.argv[1] if len(sys.argv) > 1 else os.path.join(histdir(), 'output', str(now))
+  if not os.path.exists(__output_directory__):
+    os.makedirs(__output_directory__)
+
+  sys.stderr.write("Outputting files to {0}\n".format(__output_directory__))
+
   sys.stderr.write("Getting credentials\n")
 
-  a = AtelierSvc(**creator.get_credentials())
+  svc = AtelierSvc(**creator.get_credentials())
   # Need to pull only invoices since last pull
-  sys.stderr.write("Getting invoices\n")
-  invoices = a.get_invoices('2010-01-01', '2010-12-01')
+  sys.stderr.write("Getting invoices created between {last_run} and {now}\n".format(last_run=get_last_run_time(), now=now))
+  invoices = svc.get_invoices(get_last_run_time(), now)
 
   record_counts = dict(
       header = 0,
       detail = 0
   )
 
-  sys.stderr.write("Creating header file\n")
-  with open('H%s' % (batch_number, ), 'w') as file:
+  header_file = os.path.join(__output_directory__, 'H%s' % (batch_number, ))
+  detail_file = os.path.join(__output_directory__, 'D%s' % (batch_number, ))
+  batch_file  = os.path.join(__output_directory__, 'B%s' % (batch_number, ))
+
+  sys.stderr.write("Creating header file {0}\n".format(header_file))
+  with open(header_file, 'w') as file:
     for item in invoices:
-      for output in creator.create_header_file_output(AtelierInvoiceDao.map(item, InvoiceOnly=True, BatchNumber=batch_number)):
+      for output in creator.create_header_file_output(AtelierInvoiceDao.map(item, InvoiceOnly=True, BatchNumber=batch_number, svc=svc)):
         record_counts['header'] += 1
         file.write(output)
         file.write("\n")
 
-  sys.stderr.write("Creating detail file\n")
-  with open('D%s' % (batch_number, ), 'w') as file:
+  sys.stderr.write("Creating detail file {0}\n".format(detail_file))
+  with open(detail_file, 'w') as file:
     for item in invoices:
-      for output in creator.create_detail_file_output(AtelierInvoiceDao.map(item, BatchNumber=batch_number)):
+      for output in creator.create_detail_file_output(AtelierInvoiceDao.map(item, BatchNumber=batch_number, svc=svc)):
         record_counts['detail'] += 1
         file.write(output)
         file.write("\n")
 
-  sys.stderr.write("Creating batch file\n")
-  with open("B%s" % (batch_number, ), 'w') as file:
+  sys.stderr.write("Creating batch file {0}\n".format(batch_file))
+  with open(batch_file, 'w') as file:
     record = {
         'batch_number': batch_number,
         'date': now.strftime('%Y%m%d'),
@@ -514,11 +545,35 @@ def main():
     for output in creator.create_batch_file_output(record):
       file.write(output)
       file.write("\n")
-
   sys.stderr.write("Done")
+  set_last_run_time(now)
+
+def histdir():
+  if not os.path.exists(__HISTDIR__):
+    os.makedirs(__HISTDIR__)
+  return __HISTDIR__
 
 def histfile():
-  pass
+  return os.path.join(histdir(), 'history')
+
+def get_history():
+  try:
+    with open(histfile(), 'rb') as f:
+      return pickle.load(f)
+  except:
+    return dict()
+
+def get_last_run_time():
+  return get_history().get('last_runtime', '2010-01-01')
+
+def set_history(history):
+  with open(histfile(), 'wb') as f:
+    pickle.dump(history, f, -1)
+
+def set_last_run_time(last_runtime):
+  hist = get_history()
+  hist['last_runtime'] = last_runtime
+  set_history(hist)
 
 def get_lock():
   if not os.path.exists(piddir()):
