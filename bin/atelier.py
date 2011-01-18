@@ -17,10 +17,10 @@ from datetime import datetime
 
 __BASE_DIR__ = '/home/ateliercologne'
 
-__HISTDIR__ = __PIDDIR__ = os.path.join(__BASE_DIR__, 'Atelier-ADS')
+__HISTDIR__ = __PIDDIR__ = __CREDS_DIR__ = os.path.join(__BASE_DIR__, 'Atelier-ADS')
 
-__MAGE_API_USER__, __MAGE_API_PASS__ = commands.getoutput('cat {BASE_DIR}/MAGE_API_CREDENTIALS'.format(BASE_DIR=__BASE_DIR__)).split('|')
-__SFTP_USER__,  __SFTP_PASS__ = commands.getoutput('cat {BASE_DIR}/ADS_SFTP_CREDENTIALS'.format(BASE_DIR=__BASE_DIR__)).split('|')
+__MAGE_API_USER__, __MAGE_API_PASS__ = commands.getoutput('cat {BASE_DIR}/MAGE_API_CREDENTIALS'.format(BASE_DIR=__CREDS_DIR__)).split('|')
+__SFTP_USER__,  __SFTP_PASS__ = commands.getoutput('cat {BASE_DIR}/ADS_SFTP_CREDENTIALS'.format(BASE_DIR=__CREDS_DIR__)).split('|')
 
 class FileCreator(object):
   def create_batch_file_output(self, record):
