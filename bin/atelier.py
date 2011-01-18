@@ -277,7 +277,7 @@ class AtelierSvc(object):
       sys.exit(1)
     return [
       self.sales_order(i['increment_id']) for \
-          i in self.call('sales_order.list', [{'created_at': {'from': from_dt, 'to': to_dt}}])
+          i in self.call('sales_order.list', [{'created_at': {'gteq': from_dt.strftime('%Y-%m-%d %H:%I:%s'), 'lt': to_dt.strftime('%Y-%m-%d %H:%I:%s')}}])
     ]
 
   def sales_order(self, id):
@@ -572,6 +572,7 @@ def main():
     for output in creator.create_batch_file_output(record):
       file.write(output)
       file.write("\n")
+  sys.stderr.write("Created {header} header records and {detail} detail records\n".format(**record_counts))
   sys.stderr.write("Setting last run time to {0}\n".format(now))
   set_last_run_time(now)
   sys.stderr.write("Done")
