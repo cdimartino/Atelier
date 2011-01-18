@@ -3,6 +3,10 @@ from __future__ import with_statement
 
 import os
 import sys
+
+import commands
+import hashlib
+import paramiko
 import xmlrpclib
 try:
   import cPickle as pickle
@@ -11,8 +15,12 @@ except:
 import re
 from datetime import datetime
 
-__PIDDIR__ = '/var/run/atelier_invoices'
-__HISTDIR__ = '/var/cache/atelier_invoices'
+__BASE_DIR__ = '/home/ateliercologne'
+
+__HISTDIR__ = __PIDDIR__ = os.path.join(__BASE_DIR__, 'Atelier-ADS')
+
+__MAGE_API_USER__, __MAGE_API_PASS__ = commands.getoutput('cat {BASE_DIR}/MAGE_API_CREDENTIALS').split('|')
+__SFTP_USER__,  __SFTP_PASS__ = commands.getoutput('cat {BASE_DIR}/ADS_SFTP_CREDENTIALS').split('|')
 
 class FileCreator(object):
   def create_batch_file_output(self, record):
@@ -226,8 +234,8 @@ class FileCreator(object):
   def get_credentials(self):
     return dict(
         url = 'https://secure.ateliercologne.com/store/api/xmlrpc',
-        username = 'order_extract',
-        password = '3xtr@ct0r'
+        username = __MAGE_API_USER__,
+        password = __MAGE_API_PASS__
         )
 
 
@@ -264,6 +272,9 @@ class AtelierSvc(object):
     return self.service.call(self.sid, method, *params)
 
   def get_invoices(self, from_dt, to_dt):
+    if from_dt.date() == to_dt.date():
+      sys.stderr.write("Get invoices has already been run for {0}.  Please run again after {0}\n".format(to_dt.date()))
+      sys.exit(1)
     return [
       self.sales_order(i['increment_id']) for \
           i in self.call('sales_order.list', [{'created_at': {'from': from_dt, 'to': to_dt}}])
@@ -490,16 +501,32 @@ class AtelierInvoiceDao(object):
         return '08'
 
 
+class AtelierTransport(object):
+  _destination = ('ads-live.dyndns.org', 22)
+  _credentials = dict(
+      username = __SFTP_USER__,
+      password = __SFTP_PASS__
+  )
+
+  def __init__(self, filename, mode):
+    self._filename = os.path.join('/orders_in', filename)
+    self._mode = mode
+
+  def __enter__(self):
+    self.transport = paramiko.Transport(self._destination)
+    self.transport.connect(**self._credentials)
+    self.client = paramiko.SFTPClient.from_transport(self.transport)
+    return self.client.file(self._filename, self._mode)
+
+  def __exit__(self, type, value, traceback):
+    self.client.close()
+    self.transport.close()
+
+
 def main():
   now = datetime.now()
   batch_number = now.strftime('%y%m%d')
   creator = FileCreator()
-
-  __output_directory__ = sys.argv[1] if len(sys.argv) > 1 else os.path.join(histdir(), 'output', str(now))
-  if not os.path.exists(__output_directory__):
-    os.makedirs(__output_directory__)
-
-  sys.stderr.write("Outputting files to {0}\n".format(__output_directory__))
 
   sys.stderr.write("Getting credentials\n")
 
@@ -513,12 +540,12 @@ def main():
       detail = 0
   )
 
-  header_file = os.path.join(__output_directory__, 'H%s' % (batch_number, ))
-  detail_file = os.path.join(__output_directory__, 'D%s' % (batch_number, ))
-  batch_file  = os.path.join(__output_directory__, 'B%s' % (batch_number, ))
+  header_file = 'H{0}'.format(batch_number)
+  detail_file = 'D{0}'.format(batch_number)
+  batch_file = 'B{0}'.format(batch_number)
 
   sys.stderr.write("Creating header file {0}\n".format(header_file))
-  with open(header_file, 'w') as file:
+  with AtelierTransport(header_file, 'w') as file:
     for item in invoices:
       for output in creator.create_header_file_output(AtelierInvoiceDao.map(item, InvoiceOnly=True, BatchNumber=batch_number, svc=svc)):
         record_counts['header'] += 1
@@ -526,7 +553,7 @@ def main():
         file.write("\n")
 
   sys.stderr.write("Creating detail file {0}\n".format(detail_file))
-  with open(detail_file, 'w') as file:
+  with AtelierTransport(detail_file, 'w') as file:
     for item in invoices:
       for output in creator.create_detail_file_output(AtelierInvoiceDao.map(item, BatchNumber=batch_number, svc=svc)):
         record_counts['detail'] += 1
@@ -534,7 +561,7 @@ def main():
         file.write("\n")
 
   sys.stderr.write("Creating batch file {0}\n".format(batch_file))
-  with open(batch_file, 'w') as file:
+  with AtelierTransport(batch_file, 'w') as file:
     record = {
         'batch_number': batch_number,
         'date': now.strftime('%Y%m%d'),
@@ -545,8 +572,12 @@ def main():
     for output in creator.create_batch_file_output(record):
       file.write(output)
       file.write("\n")
-  sys.stderr.write("Done")
+  sys.stderr.write("Setting last run time to {0}\n".format(now))
   set_last_run_time(now)
+  sys.stderr.write("Done")
+  #except Exception as ex:
+  #  sys.stderr.write("Error: {err}".format(err=ex.args))
+  #  sys.exit(1)
 
 def histdir():
   if not os.path.exists(__HISTDIR__):
@@ -564,7 +595,7 @@ def get_history():
     return dict()
 
 def get_last_run_time():
-  return get_history().get('last_runtime', '2010-01-01')
+  return get_history().get('last_runtime', datetime.strptime('2010-01-01', '%Y-%m-%d'))
 
 def set_history(history):
   with open(histfile(), 'wb') as f:
@@ -615,3 +646,4 @@ if __name__ == '__main__':
   get_lock()
   main()
   remove_lock()
+  sys.exit(0)
