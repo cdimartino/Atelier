@@ -277,7 +277,7 @@ class AtelierSvc(object):
       sys.exit(1)
     return [
       self.sales_order(i['increment_id']) for \
-          i in self.call('sales_order.list', [{'created_at': {'gteq': from_dt.strftime('%Y-%m-%d %H:%I:%s'), 'lt': to_dt.strftime('%Y-%m-%d %H:%I:%s')}}])
+          i in self.call('sales_order.list', [{'created_at': {'gteq': from_dt.strftime('%Y-%m-%d %H:%I:%S'), 'lt': to_dt.strftime('%Y-%m-%d %H:%I:%S')}}])
     ]
 
   def sales_order(self, id):
