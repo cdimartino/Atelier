@@ -8,6 +8,7 @@ import commands
 import hashlib
 import paramiko
 import xmlrpclib
+import socket
 try:
   import cPickle as pickle
 except:
@@ -507,12 +508,14 @@ class AtelierTransport(object):
       username = __SFTP_USER__,
       password = __SFTP_PASS__
   )
+  _timeout = 30
 
   def __init__(self, filename, mode):
     self._filename = os.path.join('/orders_in', filename)
     self._mode = mode
 
   def __enter__(self):
+    self.socket = socket.create_connection(self._destination, self._timeout)
     self.transport = paramiko.Transport(self._destination)
     self.transport.connect(**self._credentials)
     self.client = paramiko.SFTPClient.from_transport(self.transport)
@@ -521,6 +524,8 @@ class AtelierTransport(object):
   def __exit__(self, type, value, traceback):
     self.client.close()
     self.transport.close()
+    self.socket.shutdown()
+    self.socket.close()
 
 
 def main():
